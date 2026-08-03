@@ -2,119 +2,148 @@
 
 > **Devsinc AI/ML Internship — 3-Day CNN Project**
 
-A plant-leaf disease classifier powered by a fine-tuned **MobileNetV3-Small** CNN,
-served through a FastAPI backend and a plain-HTML/JS frontend.
+A plant-leaf disease classifier powered by a fine-tuned **MobileNetV3-Small** CNN, served through a FastAPI backend and a plain HTML/JS frontend. Upload a leaf photo and get an instant diagnosis with treatment recommendation and Grad-CAM heatmap.
+
+**GitHub:** [umair-anjum-ds/Plant_Disease_Detection](https://github.com/umair-anjum-ds/Plant_Disease_Detection)
 
 ---
 
 ## Goal
 
-Classify a leaf photograph into one of **10 categories** across 4 crops:
+Classify a leaf photograph into one of **11 categories** across 4 crops:
 
-| Crop   | Classes predicted                          |
-|--------|--------------------------------------------|
-| Apple  | Apple Scab · Healthy                       |
-| Corn   | Common Rust · Healthy                      |
-| Potato | Early Blight · Late Blight · Healthy       |
-| Tomato | Bacterial Spot · Leaf Mold · Healthy       |
+| Crop   | Classes Predicted                                     |
+|--------|-------------------------------------------------------|
+| Apple  | Black Rot · Cedar Apple Rust · Healthy                |
+| Corn   | Common Rust · Healthy                                 |
+| Potato | Early Blight · Late Blight · Healthy                  |
+| Tomato | Bacterial Spot · Leaf Mold · Healthy                  |
 
-**Dataset used:** [New Plant Diseases Dataset — Kaggle (vipoooool)](https://www.kaggle.com/datasets/vipoooool/new-plant-diseases-dataset)
-~87,000 images, pre-split into `train/` and `valid/` folders, covering 38 classes in total.
-We filter to the 10 classes above.
+**Dataset:** [New Plant Diseases Dataset — Kaggle (vipoooool)](https://www.kaggle.com/datasets/vipoooool/new-plant-diseases-dataset)
+20,733 train images · 5,183 validation images · 11 classes · balanced (~1,700–2,000 images per class)
 
 ---
 
 ## Done ✅
 
-- `model.py` — MobileNetV3-Small with classification + severity heads
-- `train.py` — Full training pipeline:
-  - Phase 1 (epochs 1–5): freeze backbone, train heads only
-  - Phase 2 (epochs 6–15): unfreeze backbone, lower LR for fine-tuning
-  - Data augmentation: flips, rotation, colour jitter, affine
-  - Proper train / val / test split (val carved 50/50 from Kaggle `valid/`)
-  - Saves best checkpoint by val accuracy
-  - Outputs confusion matrix + training curves + classification report
-- `gradcam.py` — Real Grad-CAM (hooks on `features[-1]` of MobileNetV3)
-- `main.py` — FastAPI backend:
-  - Loads **trained** checkpoint at startup (raises clear error if missing)
-  - `/predict` returns top-3 predictions, severity, Grad-CAM overlay, latency
-  - No fake heuristics — every number comes from the model
-- `frontend/index.html` — Single-file frontend, no build step required:
-  - Drag-and-drop upload
-  - Confidence bar + top-3 chart
-  - Grad-CAM heatmap
-  - Treatment recommendation per class
+### Day 1 — Data and first model
 
----
+- Downloaded and explored the New Plant Diseases Dataset from Kaggle
+- Verified class balance: all 11 classes have 1,700–2,000 images each
+- Verified zero data leakage: **0 shared filenames** between train and valid
+- Built `model.py`: MobileNetV3-Small backbone with two output heads:
+  - Classifier head: 11-class disease prediction
+  - Severity head: auxiliary regression (0.0 = healthy, 1.0 = severe)
+- Built `train.py`: full pipeline with augmentation, train/val/test split, checkpoint saving
+- First model ran end-to-end successfully
 
-## Currently working on
+### Day 2 — Model tuning and evaluation
 
-Day 2 experiments — comparing:
-- From-scratch small CNN (3 conv blocks) vs MobileNetV3 fine-tune
-- Dropout 0.2 vs 0.4 on classifier head
-- With vs without colour-jitter augmentation
+- Implemented 2-phase fine-tuning:
+  - Phase 1 (epochs 1–5): backbone frozen, heads trained only
+  - Phase 2 (epochs 6–15): backbone unfrozen, end-to-end fine-tuning at lower LR
+- Augmentation: random flips, rotation ±20°, colour jitter, affine translate
+- Deterministic class-balanced 50/50 split of valid → val + test (SEED=42)
+- Implemented real Grad-CAM in `gradcam.py` — hooks on `features[-1]` of MobileNetV3
+- Saved best checkpoint by val accuracy, confusion matrix, training curves, per-class report
+
+### Day 3 — Web app
+
+- Built `main.py`: FastAPI backend with 4 endpoints:
+  - `POST /predict` — returns diagnosis, top-3, severity, Grad-CAM, treatment, latency
+  - `GET /classes` — lists all 11 classes
+  - `GET /model-info` — returns architecture, accuracy, dataset info
+  - `GET /` — health check
+- Built `frontend/index.html`: single-file UI, no build step required:
+  - Drag-and-drop image upload
+  - Confidence bar with colour coding
+  - Top-3 predictions with probability bars
+  - Severity indicator
+  - Grad-CAM heatmap display
+  - Disease-specific treatment recommendation
+  - Inference latency display
 
 ---
 
 ## Results
 
-| Metric                | Value       |
-|-----------------------|-------------|
-| Val accuracy (best)   | see `artifacts/training_meta.json` |
-| Test accuracy         | see `artifacts/training_meta.json` |
-| Confusion matrix      | `artifacts/confusion_matrix.png`   |
-| Training curves       | `artifacts/training_curves.png`    |
+| Metric            | Value                                      |
+|-------------------|--------------------------------------------|
+| Train Accuracy    | ~97.3%                                     |
+| Val Accuracy      | ~98.3%                                     |
+| Test Accuracy     | see `artifacts/training_meta.json`         |
+| Confusion Matrix  | `artifacts/confusion_matrix.png`           |
+| Training Curves   | `artifacts/training_curves.png`            |
+| Inference Latency | ~50–150ms per image (CPU)                  |
 
-> Run training (step 3 below) to populate these numbers with real values.
+### Data leakage audit
 
-### What the model gets wrong most often
+| Check | Result |
+|---|---|
+| Train vs valid filename overlap | 0 shared filenames ✅ |
+| Val vs test index overlap | 0 shared indices ✅ |
+| Val + test covers full valid set | All images accounted for ✅ |
+| Augmentation on val/test | None — resize + normalize only ✅ |
+| Class balance across val and test | All 11 classes equal ✅ |
 
-Based on the confusion matrix, the most common misclassifications are:
-- **Potato Early Blight ↔ Late Blight** (both show dark lesions on mature leaves)
-- **Tomato Bacterial Spot ↔ Tomato Leaf Mold** (both appear in greenhouse tomatoes)
+### Most common misclassifications
 
-The healthy classes are the clearest — least often misclassified.
-
-### What I tried that didn't work
-
-- **LR = 1e-2 for the backbone**: caused training collapse in Phase 2;
-  fixed by using LR = 1e-4 for backbone params and 1e-3 for heads.
-- **Severity head with pixel-ratio labels**: noisy and unstable; switched to
-  a simple binary heuristic (0 = healthy class, 0.7 = diseased class) as a
-  proxy signal.
-- **Fake pixel-heuristic override** (from original code): removed entirely —
-  it was always predicting "Tomato - Bacterial Spot" regardless of input.
+- **Potato Early Blight ↔ Late Blight** — both show dark lesions on mature leaves
+- **Tomato Bacterial Spot ↔ Tomato Leaf Mold** — both appear in greenhouse tomatoes
 
 ---
 
-## Future additions
+## What I Tried That Did NOT Work
 
-- Grad-CAM guided augmentation (focus augmentation on non-activated regions)
-- Out-of-scope detection: reject images that aren't plant leaves
-- Side-by-side model comparison view in the UI (scratch CNN vs fine-tuned)
-- Deploy to Hugging Face Spaces for public demo
-- Report per-class F1 in the UI alongside overall accuracy
+| What I tried | What happened | Fix applied |
+|---|---|---|
+| `labels % 2 == 1` for severity labels | Wrong healthy/disease mapping for our class order | Replaced with explicit `HEALTHY_INDICES = {2, 4, 7, 10}` |
+| Double underscore `__` in CLASSES | Mismatch with actual `___` folder names — model predicted everything as Tomato Healthy | Updated all CLASSES to match exact folder names |
+| LR = 1e-2 for backbone in Phase 2 | Training collapsed, loss spiked | Fixed to LR/10 for backbone, full LR for heads |
+| Fake pixel-colour heuristic (original code) | Always predicted the same class regardless of input | Removed entirely — all predictions now from model softmax |
 
 ---
 
-## How to run (from a fresh clone)
+## Currently Working On
 
-### 1. Download the dataset
+- Comparing from-scratch 3-block CNN vs MobileNetV3 fine-tune
+- Testing dropout 0.2 vs 0.4 on the classifier head
+- Measuring exact impact of colour-jitter augmentation on val accuracy
+
+---
+
+## Future Additions
+
+- Out-of-scope detection: reject images that are not plant leaves
+- Side-by-side model comparison in the UI
+- Deploy to Hugging Face Spaces
+- Before/after augmentation gallery in the frontend
+- Per-class F1 score displayed in the UI
+- Grad-CAM guided augmentation on under-activated regions
+
+---
+
+## How to Run (From a Fresh Clone)
+
+### 1. Clone the repo
 
 ```bash
-# Install kaggle CLI if needed: pip install kaggle
+git clone https://github.com/umair-anjum-ds/Plant_Disease_Detection.git
+cd Plant_Disease_Detection
+```
+
+### 2. Download the dataset
+
+```bash
 kaggle datasets download -d vipoooool/new-plant-diseases-dataset
 unzip new-plant-diseases-dataset.zip -d data/
 ```
 
-The `data/` folder should contain `train/` and `valid/` subdirectories,
-each with one subfolder per class.
-
-**Filter to our 10 classes** (delete the other 28 class folders from both
-`train/` and `valid/`):
+Keep only these 11 folders inside both `data/train/` and `data/valid/`:
 
 ```
-Apple___Apple_scab
+Apple___Black_rot
+Apple___Cedar_apple_rust
 Apple___healthy
 Corn_(maize)___Common_rust_
 Corn_(maize)___healthy
@@ -126,57 +155,85 @@ Tomato___Leaf_Mold
 Tomato___healthy
 ```
 
-### 2. Install dependencies
+### 3. Install dependencies
 
 ```bash
 cd backend
 pip install -r requirements.txt
 ```
 
-### 3. Train the model
+### 4. Train the model
 
 ```bash
 python train.py --data_dir ../data --epochs 15 --batch_size 32
-# Outputs: artifacts/best_model.pth, confusion_matrix.png, training_curves.png
 ```
 
-### 4. Run the backend
+Outputs saved to `backend/artifacts/`:
+
+```
+best_model.pth         ← best checkpoint by val accuracy
+training_meta.json     ← accuracy numbers and class list
+confusion_matrix.png   ← per-class confusion matrix on test set
+training_curves.png    ← loss and accuracy curves over epochs
+```
+
+### 5. Run the backend
 
 ```bash
+cd backend
 uvicorn main:app --reload --port 8000
-# → http://localhost:8000/docs  (Swagger UI)
 ```
 
-### 5. Open the frontend
+Confirm this line appears at startup:
+```
+Loaded model from ./artifacts/best_model.pth  (device=cpu)
+```
 
-```bash
-# No build step needed — open directly in a browser:
-open ../frontend/index.html
-# or serve it:
-python -m http.server 3000 --directory ../frontend
+API docs: `http://localhost:8000/docs`
+
+### 6. Open the frontend
+
+```powershell
+cd ../frontend
+python -m http.server 3000
+# Open: http://localhost:3000
 ```
 
 ---
 
-## Project structure
+## Project Structure
 
 ```
-crop_classifier/
+Plant_Disease_Detection/
+├── README.md
 ├── backend/
-│   ├── model.py          # CropDiagnosticCNN (MobileNetV3-Small)
-│   ├── train.py          # Full training pipeline
-│   ├── gradcam.py        # Real Grad-CAM implementation
-│   ├── main.py           # FastAPI API server
+│   ├── model.py               # CropDiagnosticCNN (MobileNetV3-Small)
+│   ├── train.py               # Full training pipeline
+│   ├── gradcam.py             # Real Grad-CAM implementation
+│   ├── main.py                # FastAPI API server
 │   ├── requirements.txt
-│   └── artifacts/        # Created by train.py
+│   └── artifacts/             # Created by train.py
 │       ├── best_model.pth
 │       ├── training_meta.json
 │       ├── confusion_matrix.png
 │       └── training_curves.png
 └── frontend/
-    └── index.html        # Self-contained UI (no build step)
+    └── index.html             # Self-contained UI (no build step)
 ```
 
 ---
 
-*Devsinc AI/ML Internship · 3-Day CNN Project*
+## .gitignore
+
+```
+backend/artifacts/best_model.pth
+data/
+__pycache__/
+*.pyc
+.env
+venv/
+```
+
+---
+
+*Devsinc AI/ML Internship · 3-Day CNN Project · New Plant Diseases Dataset (Kaggle)*
