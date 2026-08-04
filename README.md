@@ -71,9 +71,8 @@ Classify a leaf photograph into one of **11 categories** across 4 crops:
 |-------------------|--------------------------------------------|
 | Train Accuracy    | ~97.3%                                     |
 | Val Accuracy      | ~98.3%                                     |
-| Test Accuracy     | see `artifacts/training_meta.json`         |
-| Confusion Matrix  | `artifacts/confusion_matrix.png`           |
-| Training Curves   | `artifacts/training_curves.png`            |
+| Test Accuracy     | ~98.2%        |
+| Confusion Matrix  | `artifacts/confusion_matrix.png`           |           |
 | Inference Latency | ~50–150ms per image (CPU)                  |
 
 ### Data leakage audit
